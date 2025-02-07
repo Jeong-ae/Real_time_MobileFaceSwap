@@ -1,4 +1,4 @@
-
+from flask import Flask, Response, render_template
 import paddle
 import argparse
 import cv2
@@ -10,6 +10,8 @@ from utils.align_face import back_matrix, dealign, align_img
 from utils.util import paddle2cv, cv2paddle
 from utils.prepare_data import LandmarkModel
 from tqdm import tqdm
+
+app = Flask(__name__)
 
 def get_id_emb(id_net, id_img):
     id_img = cv2.resize(id_img, (112, 112))
@@ -23,41 +25,37 @@ def get_id_emb(id_net, id_img):
 
     return id_emb, id_feature
 
-
-def video_test(args):
-
-    paddle.set_device("gpu" if args.use_gpu else 'cpu')
-    faceswap_model = FaceSwap(args.use_gpu)
+def generate_frames(source_img_path):
+    paddle.set_device("gpu" if paddle.is_compiled_with_cuda() else 'cpu')
+    faceswap_model = FaceSwap(use_gpu=paddle.is_compiled_with_cuda())
 
     id_net = ResNet(block=IRBlock, layers=[3, 4, 23, 3])
     id_net.set_dict(paddle.load('./checkpoints/arcface.pdparams'))
-
     id_net.eval()
 
     weight = paddle.load('./checkpoints/MobileFaceSwap_224.pdparams')
+    
 
     landmarkModel = LandmarkModel(name='landmarks')
-    landmarkModel.prepare(ctx_id= 0, det_thresh=0.6, det_size=(640,640))
-    id_img = cv2.imread(args.source_img_path)
-
+    landmarkModel.prepare(ctx_id=0, det_thresh=0.6, det_size=(640,640))
+    
+    id_img = cv2.imread(source_img_path)
     landmark = landmarkModel.get(id_img)
     if landmark is None:
-        print('**** No Face Detect Error ****')
-        exit()
+        yield (b'No face detected; please adjust camera.')
+        return
     aligned_id_img, _ = align_img(id_img, landmark)
-
     id_emb, id_feature = get_id_emb(id_net, aligned_id_img)
-
     faceswap_model.set_model_param(id_emb, id_feature, model_weight=weight)
     faceswap_model.eval()
 
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    cap = cv2.VideoCapture()
-    cap.open(args.target_video_path)
-    videoWriter = cv2.VideoWriter(os.path.join(args.output_path, os.path.basename(args.target_video_path)), fourcc, int(cap.get(cv2.CAP_PROP_FPS)), (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))))
-    all_f = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-    for i in tqdm(range(int(all_f))):
-        ret, frame = cap.read()
+    cap = cv2.VideoCapture(0)
+    while True:
+        success, frame = cap.read()
+        if not success:
+            break
+        original_frame = frame.copy()
+
         landmark = landmarkModel.get(frame)
         if landmark is not None:
             att_img, back_matrix = align_img(frame, landmark)
@@ -65,26 +63,25 @@ def video_test(args):
             res, mask = faceswap_model(att_img)
             res = paddle2cv(res)
             mask = np.transpose(mask[0].numpy(), (1, 2, 0))
-            res = dealign(res, frame, back_matrix, mask)
-            frame = res
+            frame = dealign(res, frame, back_matrix, mask)
         else:
-            print('**** No Face Detect Error ****')
-        videoWriter.write(frame)
-    cap.release()
-    videoWriter.release()
+            print('**** No Face Detected ****')
 
+        combined_frame = cv2.hconcat([original_frame, frame])
+        ret, buffer = cv2.imencode('.jpg', combined_frame)
+        frame = buffer.tobytes()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+
+@app.route('/video_feed')
+def video_feed():
+    source_img_path = '/user/target3.JPG'  # Make sure to update this path
+    return Response(generate_frames(source_img_path), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/')
+def index():
+    # Return a main page with the video stream embedded
+    return render_template('index.html')
 
 if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser(description="MobileFaceSwap Test")
-
-    parser = argparse.ArgumentParser(description="MobileFaceSwap Test")
-    parser.add_argument('--source_img_path', type=str, help='path to the source image')
-    parser.add_argument('--target_video_path', type=str, help='path to the target video')
-    parser.add_argument('--output_path', type=str, default='results', help='path to the output videos')
-    parser.add_argument('--image_size', type=int, default=224,help='size of the test images (224 SimSwap | 256 FaceShifter)')
-    parser.add_argument('--merge_result', type=bool, default=True, help='output with whole image')
-    parser.add_argument('--use_gpu', type=bool, default=False)
-
-    args = parser.parse_args()
-    video_test(args)
+    app.run(debug=True, host='0.0.0.0', port=8000)
