@@ -1,7 +1,7 @@
 ### [MobileFaceSwap: A Lightweight Framework for Video Face Swapping (AAAI 2022)](https://arxiv.org/abs/2201.03808)
 --- 
 
-**Real-time Inference For MobileFaceSwap **
+### Real-time Inference For MobileFaceSwap
 - unofficial inference code for real-time MobileFaceSwap using web-cam 
 
 **Dependencies**
@@ -12,13 +12,14 @@
 
 For My Environment : ubuntu 20.04 / cuda 11.6 / python 3.8.10 / torch 2.0.0+cu117
 
+```
   python3 -m pip install paddlepaddle-gpu==2.3.1.post116 -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html
   pip install insightface==0.2.1
   apt-get -y install libgl1-mesa-glx
   pip install protobuf==3.20.*
   pip install onnxruntime==1.14
   pip install Flask
-
+```
 
 **Getting Started**
 
