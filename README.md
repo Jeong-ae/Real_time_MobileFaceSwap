@@ -5,11 +5,6 @@
 - unofficial inference code for real-time MobileFaceSwap using web-cam 
 
 **Dependencies**
-- paddlepaddle==2.1.2
-- insightface==0.2.1
-- opencv
-- numpy
-
 For My Environment : ubuntu 20.04 / cuda 11.6 / python 3.8.10 / torch 2.0.0+cu117
 
 ```
@@ -19,6 +14,9 @@ For My Environment : ubuntu 20.04 / cuda 11.6 / python 3.8.10 / torch 2.0.0+cu11
   pip install protobuf==3.20.*
   pip install onnxruntime==1.14
   pip install Flask
+  pip install numpy
+  pip install opencv-python
+
 ```
 
 **Getting Started**
